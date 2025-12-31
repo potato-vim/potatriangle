@@ -141,7 +141,7 @@ function computeConnectedComponents(colorMap: Map<string, Color>): { white: numb
 }
 
 // グリッドサイズ
-const GRID_SIZE = 8
+const GRID_SIZE = 17
 
 type SortKey = 'attempt' | 'white' | 'black' | 'gray' | 'total'
 type SearchMode = 'random' | 'exhaustive'
@@ -578,10 +578,10 @@ function App() {
     }
   }
 
-  // 8x8範囲の三角形生成
+  // 18x18範囲の三角形生成
   const triangles: { x: number; y: number; isUp: boolean }[] = []
-  for (let y = -4; y <= 4; y++) {
-    for (let x = -8; x <= 8; x++) {
+  for (let y = -9; y <= 8; y++) {
+    for (let x = -17; x <= 17; x++) {
       const isUp = (x + y) % 2 === 0
       triangles.push({ x, y, isUp })
     }

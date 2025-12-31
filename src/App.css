@@ -20,8 +20,8 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 280px;
-  width: 320px;
+  min-width: 400px;
+  width: 500px;
   height: 100%;
   overflow: hidden;
 }
