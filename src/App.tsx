@@ -7,11 +7,9 @@ const COLOR_NAMES = ['transparent', 'white', 'black', 'gray'] as const
 const COLOR_VALUES = ['transparent', '#ffffff', '#1a1a1a', '#888888']
 
 // 相対的な色番号: white(1) < black(2) < gray(3) < white(1)
-// 色aから色bへの相対番号 = (b - a + 3) % 3 (ただし a,b は 1,2,3)
 function relativeColorNum(a: number, b: number): number {
-  // a, b は 1, 2, 3 (white, black, gray)
   const diff = ((b - 1) - (a - 1) + 3) % 3
-  return diff // 0, 1, or 2
+  return diff
 }
 
 interface TriangleCoord {
@@ -31,14 +29,12 @@ function areAdjacent(a: TriangleCoord, b: TriangleCoord): boolean {
   const dy = b.y - a.y
 
   if (a.isUp) {
-    // 上向き三角形の隣接: 左(-1,0,down), 右(+1,0,down), 下(0,-1,down)
     if (!b.isUp) {
       if (dx === -1 && dy === 0) return true
       if (dx === 1 && dy === 0) return true
       if (dx === 0 && dy === -1) return true
     }
   } else {
-    // 下向き三角形の隣接: 左(-1,0,up), 右(+1,0,up), 上(0,+1,up)
     if (b.isUp) {
       if (dx === -1 && dy === 0) return true
       if (dx === 1 && dy === 0) return true
@@ -54,12 +50,10 @@ function determinant(matrix: number[][]): number {
   if (n === 0) return 1
   if (n === 1) return matrix[0][0]
 
-  // コピーを作成
   const m = matrix.map(row => [...row])
   let det = 1
 
   for (let i = 0; i < n; i++) {
-    // ピボット選択
     let maxRow = i
     for (let k = i + 1; k < n; k++) {
       if (Math.abs(m[k][i]) > Math.abs(m[maxRow][i])) {
@@ -89,17 +83,88 @@ function determinant(matrix: number[][]): number {
   return det
 }
 
+// 連結成分数を計算（各色ごと）
+function computeConnectedComponents(colorMap: Map<string, Color>): { white: number; black: number; gray: number } {
+  const visited = new Set<string>()
+  const result = { white: 0, black: 0, gray: 0 }
+
+  const parseKey = (key: string): TriangleCoord => {
+    const parts = key.split(',')
+    return { x: parseInt(parts[0]), y: parseInt(parts[1]), isUp: parts[2] === 'u' }
+  }
+
+  const getKey = (x: number, y: number, isUp: boolean): string => `${x},${y},${isUp ? 'u' : 'd'}`
+
+  // DFSで連結成分を探索
+  const dfs = (startKey: string, targetColor: Color) => {
+    const stack = [startKey]
+    while (stack.length > 0) {
+      const key = stack.pop()!
+      if (visited.has(key)) continue
+      const color = colorMap.get(key)
+      if (color !== targetColor) continue
+      visited.add(key)
+
+      const coord = parseKey(key)
+      // 隣接する三角形を探索
+      const neighbors: TriangleCoord[] = coord.isUp
+        ? [
+            { x: coord.x - 1, y: coord.y, isUp: false },
+            { x: coord.x + 1, y: coord.y, isUp: false },
+            { x: coord.x, y: coord.y - 1, isUp: false }
+          ]
+        : [
+            { x: coord.x - 1, y: coord.y, isUp: true },
+            { x: coord.x + 1, y: coord.y, isUp: true },
+            { x: coord.x, y: coord.y + 1, isUp: true }
+          ]
+
+      for (const n of neighbors) {
+        const nKey = getKey(n.x, n.y, n.isUp)
+        if (!visited.has(nKey) && colorMap.get(nKey) === targetColor) {
+          stack.push(nKey)
+        }
+      }
+    }
+  }
+
+  // 各色について連結成分をカウント
+  for (const [key, color] of colorMap) {
+    if (color === 0 || visited.has(key)) continue
+    dfs(key, color)
+    if (color === 1) result.white++
+    else if (color === 2) result.black++
+    else if (color === 3) result.gray++
+  }
+
+  return result
+}
+
 // グリッドサイズ
 const GRID_SIZE = 8
+
+type SortKey = 'attempt' | 'white' | 'black' | 'gray' | 'total'
+type SearchMode = 'random' | 'exhaustive'
 
 function App() {
   const [colors, setColors] = useState<Map<string, Color>>(new Map())
   const [jsonInput, setJsonInput] = useState('')
-  const [savedResults, setSavedResults] = useState<string[]>([])
-  const [shape, setShape] = useState<TriangleCoord[]>([]) // 輪郭を保存
+  const [shape, setShape] = useState<TriangleCoord[]>([])
   const [searchStatus, setSearchStatus] = useState('')
   const [isSearching, setIsSearching] = useState(false)
+  const [searchMode, setSearchMode] = useState<SearchMode>('exhaustive')
+  const [searchProgress, setSearchProgress] = useState(0)
   const stopSearchRef = useRef(false)
+  const [foundResults, setFoundResults] = useState<{
+    colors: Map<string, Color>
+    dets: { i: number; det: number }[]
+    attempt: number
+    connected: { white: number; black: number; gray: number }
+  }[]>([])
+  const [sortKey, setSortKey] = useState<SortKey>('attempt')
+  const [sortAsc, setSortAsc] = useState(true)
+  const [showJson, setShowJson] = useState(true)
+  const [showMatrix, setShowMatrix] = useState(true)
 
   const getKey = (x: number, y: number, isUp: boolean): string => {
     return `${x},${y},${isUp ? 'u' : 'd'}`
@@ -107,11 +172,7 @@ function App() {
 
   const parseKey = (key: string): TriangleCoord => {
     const parts = key.split(',')
-    return {
-      x: parseInt(parts[0]),
-      y: parseInt(parts[1]),
-      isUp: parts[2] === 'u'
-    }
+    return { x: parseInt(parts[0]), y: parseInt(parts[1]), isUp: parts[2] === 'u' }
   }
 
   const handleClick = useCallback((x: number, y: number, isUp: boolean) => {
@@ -177,15 +238,19 @@ function App() {
       coords.push(parseKey(key))
     })
     setShape(coords)
-    setSearchStatus(`輪郭を保存: ${coords.length}個の三角形`)
+    setSearchStatus(`輪郭保存: ${coords.length}個`)
   }
 
-  // ランダムに色を生成 (1=白, 2=黒, 3=灰)
-  const randomizeColors = (targetShape: TriangleCoord[]): Map<string, Color> => {
+  // ランダムに色を生成
+  const randomizeColors = (targetShape: TriangleCoord[], currentColors: Map<string, Color>): Map<string, Color> => {
     const newColors = new Map<string, Color>()
     targetShape.forEach(coord => {
       const key = getKey(coord.x, coord.y, coord.isUp)
-      const randomColor = (Math.floor(Math.random() * 3) + 1) as Color // 1, 2, or 3
+      const currentColor = currentColors.get(key)
+      if (currentColor === undefined || currentColor === 0) {
+        return
+      }
+      const randomColor = (Math.floor(Math.random() * 3) + 1) as Color
       newColors.set(key, randomColor)
     })
     return newColors
@@ -200,9 +265,9 @@ function App() {
     if (shape.length === 0) {
       targetShape = Array.from(colors.keys()).map(parseKey)
       setShape(targetShape)
-      setSearchStatus(`輪郭を保存: ${targetShape.length}個の三角形`)
+      setSearchStatus(`輪郭保存: ${targetShape.length}個`)
     }
-    setColors(randomizeColors(targetShape))
+    setColors(randomizeColors(targetShape, colors))
   }
 
   // 小行列式を計算するヘルパー
@@ -217,7 +282,6 @@ function App() {
     const n = coloredTriangles.length
     if (n <= 1) return []
 
-    // 行列を構築
     const mat: number[][] = Array(n).fill(null).map(() => Array(n).fill(0))
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
@@ -233,7 +297,6 @@ function App() {
       }
     }
 
-    // 全ての小行列式を計算
     return mat.map((_, i) => {
       const minor = mat
         .filter((_, ri) => ri !== i)
@@ -242,7 +305,34 @@ function App() {
     })
   }
 
-  // 非ゼロ行列式を探索
+  // 優先度スコアを計算（W × B × G の積、小さいほど優先）
+  const computePriorityScore = (connected: { white: number; black: number; gray: number }): number => {
+    // 積が小さい = どれかの色がまとまっている = 情報量が多い
+    return connected.white * connected.black * connected.gray
+  }
+
+  // 総パターン数を計算
+  const totalPatterns = useMemo(() => {
+    const n = shape.length > 0 ? shape.length : colors.size
+    if (n === 0) return 0
+    return Math.pow(3, n)
+  }, [shape.length, colors.size])
+
+  // 3進数でインデックスから色配列を生成
+  const indexToColors = (index: number, targetShape: TriangleCoord[]): Map<string, Color> => {
+    const newColors = new Map<string, Color>()
+    let remaining = index
+    for (let i = 0; i < targetShape.length; i++) {
+      const coord = targetShape[i]
+      const key = getKey(coord.x, coord.y, coord.isUp)
+      const colorValue = (remaining % 3) + 1 as Color // 1, 2, or 3
+      newColors.set(key, colorValue)
+      remaining = Math.floor(remaining / 3)
+    }
+    return newColors
+  }
+
+  // 非ゼロ行列式を探索（優先度順に評価）
   const handleSearch = () => {
     if (shape.length === 0 && colors.size === 0) {
       setSearchStatus('先に輪郭を描いてください')
@@ -257,49 +347,166 @@ function App() {
 
     stopSearchRef.current = false
     setIsSearching(true)
+    setFoundResults([])
+    setSearchProgress(0)
     setSearchStatus('探索中...')
 
-    let attempts = 0
-    const maxAttempts = 100000
+    const startTime = Date.now()
+    const results: typeof foundResults = []
 
-    const searchStep = () => {
-      if (stopSearchRef.current) {
-        setSearchStatus(`探索を中止 (${attempts}回試行)`)
-        setIsSearching(false)
-        return
-      }
+    if (searchMode === 'exhaustive') {
+      // 全探索モード
+      const total = Math.pow(3, targetShape.length)
+      let currentIndex = 0
 
-      const batchSize = 1000
-      for (let i = 0; i < batchSize && attempts < maxAttempts; i++) {
-        attempts++
-        const testColors = randomizeColors(targetShape)
-        const dets = computeMinorDets(testColors)
-
-        // 全ての小行列式が非ゼロかチェック
-        const allNonZero = dets.length > 0 && dets.every(d => Math.abs(d.det) > 0.0001)
-
-        if (allNonZero) {
-          setColors(testColors)
-          setSearchStatus(`発見! ${attempts}回目で非ゼロ行列式を発見`)
+      const exhaustiveStep = () => {
+        if (stopSearchRef.current) {
+          const elapsed = (Date.now() - startTime) / 1000
+          const progress = (currentIndex / total * 100).toFixed(2)
+          setSearchStatus(`中止: ${currentIndex.toLocaleString()}/${total.toLocaleString()} (${progress}%), 発見${results.length}件 (${elapsed.toFixed(1)}秒)`)
+          setFoundResults([...results])
           setIsSearching(false)
           return
         }
+
+        // バッチ処理
+        const batchSize = Math.min(1000, total - currentIndex)
+        for (let i = 0; i < batchSize && currentIndex < total; i++, currentIndex++) {
+          const testColors = indexToColors(currentIndex, targetShape)
+          const dets = computeMinorDets(testColors)
+          const allNonZero = dets.length > 0 && dets.every(d => Math.abs(d.det) > 0.0001)
+
+          if (allNonZero) {
+            const connected = computeConnectedComponents(testColors)
+            results.push({
+              colors: new Map(testColors),
+              dets: [...dets],
+              attempt: currentIndex + 1,
+              connected
+            })
+          }
+        }
+
+        const progress = (currentIndex / total * 100)
+        setSearchProgress(progress)
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        setSearchStatus(`探索中... ${currentIndex.toLocaleString()}/${total.toLocaleString()} (${progress.toFixed(2)}%), 発見${results.length}件 (${elapsed}s)`)
+
+        if (currentIndex < total) {
+          requestAnimationFrame(exhaustiveStep)
+        } else {
+          const elapsed = (Date.now() - startTime) / 1000
+          setSearchStatus(`完了: ${total.toLocaleString()}通り探索, 発見${results.length}件 (${elapsed.toFixed(1)}秒)`)
+          setFoundResults([...results])
+          setIsSearching(false)
+          setSearchProgress(100)
+        }
       }
 
-      if (attempts >= maxAttempts) {
-        setSearchStatus(`${maxAttempts}回試行しましたが見つかりませんでした`)
-        setIsSearching(false)
-      } else {
-        setSearchStatus(`探索中... ${attempts}回試行`)
+      requestAnimationFrame(exhaustiveStep)
+    } else {
+      // ランダム探索モード
+      let attempts = 0
+      let evaluated = 0
+
+      const searchStep = () => {
+        if (stopSearchRef.current) {
+          const elapsed = (Date.now() - startTime) / 1000
+          setSearchStatus(`中止: 生成${attempts.toLocaleString()}件, 評価${evaluated.toLocaleString()}件, 発見${results.length}件 (${elapsed.toFixed(1)}秒)`)
+          setFoundResults([...results])
+          setIsSearching(false)
+          return
+        }
+
+        // Step 1: バッチで候補を生成し、連結成分数を計算
+        const batchSize = 1000
+        const candidates: {
+          colors: Map<string, Color>
+          connected: { white: number; black: number; gray: number }
+          priority: number
+          attempt: number
+        }[] = []
+
+        for (let i = 0; i < batchSize; i++) {
+          attempts++
+          const testColors = randomizeColors(targetShape, colors)
+          const connected = computeConnectedComponents(testColors)
+          const priority = computePriorityScore(connected)
+          candidates.push({
+            colors: testColors,
+            connected,
+            priority,
+            attempt: attempts
+          })
+        }
+
+        // Step 2: 優先度（W×B×G）が小さい順にソート
+        candidates.sort((a, b) => a.priority - b.priority)
+
+        // Step 3: ソート順に行列式を計算
+        for (const candidate of candidates) {
+          evaluated++
+          const dets = computeMinorDets(candidate.colors)
+          const allNonZero = dets.length > 0 && dets.every(d => Math.abs(d.det) > 0.0001)
+
+          if (allNonZero) {
+            results.push({
+              colors: new Map(candidate.colors),
+              dets: [...dets],
+              attempt: candidate.attempt,
+              connected: candidate.connected
+            })
+          }
+        }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        setSearchStatus(`探索中... 生成${attempts.toLocaleString()}件, 発見${results.length}件 (${elapsed}s)`)
         requestAnimationFrame(searchStep)
       }
-    }
 
-    requestAnimationFrame(searchStep)
+      requestAnimationFrame(searchStep)
+    }
   }
 
   const handleStopSearch = () => {
     stopSearchRef.current = true
+  }
+
+  // ソートされた結果
+  const sortedResults = useMemo(() => {
+    const sorted = [...foundResults]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'attempt':
+          cmp = a.attempt - b.attempt
+          break
+        case 'white':
+          cmp = a.connected.white - b.connected.white
+          break
+        case 'black':
+          cmp = a.connected.black - b.connected.black
+          break
+        case 'gray':
+          cmp = a.connected.gray - b.connected.gray
+          break
+        case 'total':
+          cmp = (a.connected.white + a.connected.black + a.connected.gray) -
+                (b.connected.white + b.connected.black + b.connected.gray)
+          break
+      }
+      return sortAsc ? cmp : -cmp
+    })
+    return sorted
+  }, [foundResults, sortKey, sortAsc])
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc)
+    } else {
+      setSortKey(key)
+      setSortAsc(true)
+    }
   }
 
   // グラフ行列の計算
@@ -314,12 +521,10 @@ function App() {
     const n = coloredTriangles.length
     if (n === 0) return { matrix: [], labels: [] }
 
-    // 頂点ラベル生成
     const labels = coloredTriangles.map((t, i) =>
       `v${i}(${t.coord.x},${t.coord.y},${t.coord.isUp ? 'u' : 'd'})`
     )
 
-    // 隣接行列とラプラシアン風行列を構築
     const mat: number[][] = Array(n).fill(null).map(() => Array(n).fill(0))
 
     for (let i = 0; i < n; i++) {
@@ -328,7 +533,6 @@ function App() {
           const ti = coloredTriangles[i]
           const tj = coloredTriangles[j]
           if (areAdjacent(ti.coord, tj.coord)) {
-            // 相対的な色番号
             const rel = relativeColorNum(ti.color, tj.color)
             mat[i][j] = -rel
             mat[i][i] += rel
@@ -352,23 +556,16 @@ function App() {
     })
   }, [matrix])
 
-  // 結果保存
-  const handleSaveResults = () => {
-    if (allMinorDets.length === 0) return
-    const timestamp = new Date().toLocaleTimeString()
-    const result = `[${timestamp}] N=${matrix.length}: ` +
-      allMinorDets.map(r => `det(−${r.i})=${r.det}`).join(', ')
-    setSavedResults(prev => [...prev, result])
-  }
+  // 現在の連結成分
+  const currentConnected = useMemo(() => computeConnectedComponents(colors), [colors])
 
-  // SVG設定
-  const scale = 35
+  // SVG設定 - 正方形にフィットするようviewBoxを使用
+  const scale = 30
   const height = Math.sqrt(3) / 2 * scale
-  const padding = scale
-  const svgWidth = GRID_SIZE * scale + padding * 2
-  const svgHeight = GRID_SIZE * height + padding * 2
-  const originX = padding + (GRID_SIZE * scale) / 2
-  const originY = padding + (GRID_SIZE * height) / 2
+  const padding = scale * 0.8
+  const svgSize = Math.max(GRID_SIZE * scale, GRID_SIZE * height) + padding * 2
+  const originX = svgSize / 2
+  const originY = svgSize / 2
 
   const getTrianglePath = (x: number, y: number, isUp: boolean): string => {
     const baseX = originX + x * scale / 2
@@ -393,46 +590,23 @@ function App() {
   const jsonOutput = JSON.stringify(generateJSON(), null, 2)
 
   return (
-    <div className="app">
-      <div className="main-content">
-        <h1>Triangle Lattice Painter</h1>
-
-        <div className="controls">
+    <div className="app-grid">
+      {/* 左カラム: キャンバス */}
+      <div className="canvas-panel">
+        <div className="canvas-header">
+          <h1>Triangle Lattice</h1>
           <div className="legend">
             {[0, 1, 2, 3].map(i => (
               <span key={i} className="legend-item">
                 <span className={`color-box ${COLOR_NAMES[i]}`}></span>
-                {COLOR_NAMES[i]}
+                {COLOR_NAMES[i][0].toUpperCase()}
               </span>
             ))}
           </div>
-          <button onClick={handleClear}>クリア</button>
-          <button onClick={handleSaveShape} disabled={colors.size === 0}>
-            輪郭を保存
-          </button>
-          <button onClick={handleRandomize} disabled={isSearching}>
-            ランダム
-          </button>
-          {!isSearching ? (
-            <button onClick={handleSearch} className="search-btn">
-              非ゼロdet探索
-            </button>
-          ) : (
-            <button onClick={handleStopSearch} className="stop-btn">
-              停止
-            </button>
-          )}
         </div>
 
-        {(searchStatus || shape.length > 0) && (
-          <div className="status">
-            {shape.length > 0 && <span className="shape-info">輪郭: {shape.length}個</span>}
-            {searchStatus && <span className="search-status">{searchStatus}</span>}
-          </div>
-        )}
-
         <div className="canvas-container">
-          <svg width={svgWidth} height={svgHeight} className="canvas">
+          <svg viewBox={`0 0 ${svgSize} ${svgSize}`} className="canvas">
             {triangles.map(({ x, y, isUp }) => {
               const key = getKey(x, y, isUp)
               const color = colors.get(key) ?? 0
@@ -448,36 +622,120 @@ function App() {
                 />
               )
             })}
-            <circle cx={originX} cy={originY} r={3} fill="red" />
-            <text x={originX + 6} y={originY + 4} fill="red" fontSize="10">O</text>
+            <circle cx={originX} cy={originY} r={2} fill="red" />
           </svg>
         </div>
 
-        <p className="info">塗られた三角形: {colors.size}個</p>
+        <div className="canvas-info">
+          <span>N={colors.size}</span>
+          {shape.length > 0 && <span>輪郭={shape.length}</span>}
+          <span>W:{currentConnected.white} B:{currentConnected.black} G:{currentConnected.gray}</span>
+          {totalPatterns > 0 && <span className="total-patterns">全{totalPatterns.toLocaleString()}通り</span>}
+        </div>
+
+        <div className="controls">
+          <button onClick={handleClear}>クリア</button>
+          <button onClick={handleSaveShape} disabled={colors.size === 0}>輪郭保存</button>
+          <button onClick={handleRandomize} disabled={isSearching}>ランダム</button>
+          <select
+            value={searchMode}
+            onChange={(e) => setSearchMode(e.target.value as SearchMode)}
+            disabled={isSearching}
+            className="mode-select"
+          >
+            <option value="exhaustive">全探索</option>
+            <option value="random">ランダム</option>
+          </select>
+          {!isSearching ? (
+            <button onClick={handleSearch} className="search-btn">探索開始</button>
+          ) : (
+            <button onClick={handleStopSearch} className="stop-btn">中断</button>
+          )}
+        </div>
+
+        {isSearching && searchMode === 'exhaustive' && (
+          <div className="progress-container">
+            <div className="progress-bar" style={{ width: `${searchProgress}%` }} />
+            <span className="progress-text">{searchProgress.toFixed(2)}%</span>
+          </div>
+        )}
+
+        {searchStatus && <div className="search-status">{searchStatus}</div>}
       </div>
 
-      <div className="side-panel">
-        <div className="json-section">
-          <h3>JSON出力</h3>
-          <textarea readOnly value={jsonOutput} rows={8} />
+      {/* 中央カラム: 探索結果 */}
+      <div className="results-panel">
+        <div className="results-header">
+          <h2>探索結果 ({foundResults.length}件)</h2>
+          {foundResults.length > 0 && (
+            <button className="clear-btn" onClick={() => setFoundResults([])}>クリア</button>
+          )}
         </div>
 
-        <div className="json-section">
-          <h3>JSON入力</h3>
-          <textarea
-            value={jsonInput}
-            onChange={e => setJsonInput(e.target.value)}
-            rows={5}
-            placeholder="JSONを貼り付け..."
-          />
-          <button onClick={handleJsonImport}>インポート</button>
+        <div className="results-table-container">
+          <table className="results-table">
+            <thead>
+              <tr>
+                <th className="sortable" onClick={() => handleSort('attempt')}>
+                  # {sortKey === 'attempt' && (sortAsc ? '▲' : '▼')}
+                </th>
+                <th className="sortable" onClick={() => handleSort('white')}>
+                  W {sortKey === 'white' && (sortAsc ? '▲' : '▼')}
+                </th>
+                <th className="sortable" onClick={() => handleSort('black')}>
+                  B {sortKey === 'black' && (sortAsc ? '▲' : '▼')}
+                </th>
+                <th className="sortable" onClick={() => handleSort('gray')}>
+                  G {sortKey === 'gray' && (sortAsc ? '▲' : '▼')}
+                </th>
+                <th className="sortable" onClick={() => handleSort('total')}>
+                  計 {sortKey === 'total' && (sortAsc ? '▲' : '▼')}
+                </th>
+                <th>det</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedResults.map((result, idx) => {
+                const total = result.connected.white + result.connected.black + result.connected.gray
+                const detFirst = result.dets[0]?.det ?? 0
+                return (
+                  <tr key={idx}>
+                    <td className="num-cell">{result.attempt}</td>
+                    <td className="num-cell">{result.connected.white}</td>
+                    <td className="num-cell">{result.connected.black}</td>
+                    <td className="num-cell">{result.connected.gray}</td>
+                    <td className="num-cell">{total}</td>
+                    <td className="det-cell" title={result.dets.map(d => d.det).join(', ')}>
+                      {detFirst}
+                    </td>
+                    <td>
+                      <button
+                        className="load-btn"
+                        onClick={() => setColors(new Map(result.colors))}
+                      >
+                        適用
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        <div className="matrix-section">
-          <h3>グラフ行列 (N={matrix.length})</h3>
-          {matrix.length > 0 ? (
-            <>
-              <div className="matrix-container">
+      {/* 右カラム: 詳細情報 */}
+      <div className="detail-panel">
+        {/* 行列セクション */}
+        <div className="collapsible-section">
+          <div className="section-header" onClick={() => setShowMatrix(!showMatrix)}>
+            <span>ラプラシアン行列 (N={matrix.length})</span>
+            <span>{showMatrix ? '▼' : '▶'}</span>
+          </div>
+          {showMatrix && matrix.length > 0 && (
+            <div className="section-content">
+              <div className="matrix-scroll">
                 <table className="matrix">
                   <thead>
                     <tr>
@@ -497,52 +755,53 @@ function App() {
                   </tbody>
                 </table>
               </div>
-
               <div className="vertex-labels">
                 {labels.map((label, i) => (
-                  <div key={i} className="label">{label}</div>
+                  <span key={i} className="label">{label}</span>
                 ))}
               </div>
-
               {allMinorDets.length > 0 && (
-                <div className="det-section">
-                  <h4>小行列式 (i行i列除去)</h4>
-                  <table className="det-table">
-                    <thead>
-                      <tr>
-                        <th>i</th>
-                        <th>det</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allMinorDets.map(({ i, det }) => (
-                        <tr key={i}>
-                          <td>{i}</td>
-                          <td>{det}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <button onClick={handleSaveResults}>結果を保存</button>
-                </div>
+                <>
+                  <div className="det-section-label">det(L[i,i]) = i行i列を除いた小行列式:</div>
+                  <div className="det-list">
+                    {allMinorDets.map(({ i, det }) => (
+                      <span key={i} className={`det-item ${Math.abs(det) < 0.0001 ? 'zero' : ''}`}>
+                        {i}:{det}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="nonzero-indices">
+                    非0: {'{'}
+                    {allMinorDets.filter(d => Math.abs(d.det) > 0.0001).map(d => d.i).join(', ') || 'なし'}
+                    {'}'}
+                  </div>
+                </>
               )}
-            </>
-          ) : (
-            <p className="empty">三角形を塗ってください</p>
+            </div>
           )}
         </div>
 
-        <div className="saved-section">
-          <h3>保存された結果</h3>
-          {savedResults.length > 0 ? (
-            <ul>
-              {savedResults.map((r, i) => <li key={i}>{r}</li>)}
-            </ul>
-          ) : (
-            <p className="empty">なし</p>
-          )}
-          {savedResults.length > 0 && (
-            <button onClick={() => setSavedResults([])}>クリア</button>
+        {/* JSON セクション */}
+        <div className="collapsible-section">
+          <div className="section-header" onClick={() => setShowJson(!showJson)}>
+            <span>JSON</span>
+            <span>{showJson ? '▼' : '▶'}</span>
+          </div>
+          {showJson && (
+            <div className="section-content">
+              <div className="json-out">
+                <textarea readOnly value={jsonOutput} rows={4} />
+              </div>
+              <div className="json-in">
+                <textarea
+                  value={jsonInput}
+                  onChange={e => setJsonInput(e.target.value)}
+                  rows={3}
+                  placeholder="JSON..."
+                />
+                <button onClick={handleJsonImport}>インポート</button>
+              </div>
+            </div>
           )}
         </div>
       </div>
