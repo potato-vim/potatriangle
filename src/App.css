@@ -1,0 +1,285 @@
+.app {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex-shrink: 0;
+}
+
+h1 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem 0;
+  color: #aaa;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.legend {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.color-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #666;
+}
+
+.color-box.transparent {
+  background:
+    linear-gradient(45deg, #f55 25%, transparent 25%),
+    linear-gradient(-45deg, #f55 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f55 75%),
+    linear-gradient(-45deg, transparent 75%, #f55 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+  background-color: #333;
+}
+
+.color-box.white {
+  background: #ffffff;
+}
+
+.color-box.black {
+  background: #1a1a1a;
+}
+
+.color-box.gray {
+  background: #888888;
+}
+
+button {
+  padding: 0.35rem 0.75rem;
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+button:hover:not(:disabled) {
+  background: #444;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.search-btn {
+  background: #2a5a2a;
+  border-color: #3a7a3a;
+}
+
+.search-btn:hover {
+  background: #3a6a3a;
+}
+
+.stop-btn {
+  background: #6a2a2a;
+  border-color: #8a3a3a;
+}
+
+.stop-btn:hover {
+  background: #7a3a3a;
+}
+
+.status {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.shape-info {
+  color: #888;
+  background: #2a2a2a;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+}
+
+.search-status {
+  color: #4a9eff;
+}
+
+.canvas-container {
+  border: 1px solid #444;
+  display: inline-block;
+  background:
+    linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
+    linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+  background-color: #1e1e1e;
+}
+
+.canvas {
+  display: block;
+}
+
+.triangle {
+  cursor: pointer;
+}
+
+.triangle:hover {
+  opacity: 0.7;
+}
+
+.info {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.side-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.json-section textarea {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #fff;
+  font-family: monospace;
+  font-size: 0.65rem;
+  padding: 0.4rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.json-section button {
+  margin-top: 0.25rem;
+}
+
+.matrix-section {
+  background: #1a1a1a;
+  padding: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.matrix-container {
+  overflow: auto;
+  max-height: 200px;
+  margin-bottom: 0.5rem;
+}
+
+.matrix {
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.matrix th,
+.matrix td {
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #444;
+  text-align: center;
+  min-width: 1.5rem;
+}
+
+.matrix th {
+  background: #2a2a2a;
+  color: #888;
+}
+
+.vertex-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.vertex-labels .label {
+  font-size: 0.6rem;
+  background: #2a2a2a;
+  padding: 0.15rem 0.3rem;
+  border-radius: 2px;
+  color: #aaa;
+}
+
+.det-section {
+  margin-top: 0.5rem;
+}
+
+.det-section h4 {
+  font-size: 0.75rem;
+  margin: 0 0 0.4rem 0;
+  color: #888;
+}
+
+.det-table {
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  font-family: monospace;
+  margin-bottom: 0.5rem;
+}
+
+.det-table th,
+.det-table td {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #444;
+  text-align: center;
+}
+
+.det-table th {
+  background: #2a2a2a;
+  color: #888;
+}
+
+.det-table td:last-child {
+  color: #4a9eff;
+  font-weight: bold;
+}
+
+.saved-section {
+  background: #1a1a1a;
+  padding: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.saved-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.saved-section li {
+  margin: 0.2rem 0;
+}
+
+.empty {
+  color: #666;
+  font-size: 0.75rem;
+  font-style: italic;
+}
